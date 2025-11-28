@@ -1,0 +1,325 @@
+---
+title: "P8157 - Final Project"
+author: "Joe LaRocca"
+date: "2025-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(lme4)
+library(nlme)
+library(geepack)
+library(survival)
+library(tidyverse)
+library(flextable)
+
+```
+
+## Part 1: Upload and Clean Data
+
+```{r}
+
+pbc_data_raw = pbcseq %>%
+  mutate(
+    trt = case_match(
+      trt,
+      1 ~ "Treatment",
+      0 ~ "Control"
+    ),
+    edema = case_match(
+      edema,
+      1.0 ~ "N Diuretics",
+      0.5 ~ "Diuretics",
+      0 ~ "None"
+    ),
+    edema = factor(
+      edema, levels = c("None", "Diuretics", "N Diuretics")
+    ),
+    time_yr = round(day / 365, 3)) 
+
+pbc_data = pbc_data_raw %>%
+  mutate(
+    ascites = ifelse(is.na(ascites), "Missing", ascites),
+    hepato = ifelse(is.na(hepato), "Missing", hepato),
+    spiders = ifelse(is.na(spiders), "Missing", spiders)
+  ) %>%
+  group_by(id) %>%
+  mutate(
+    alk.lag = lag(alk.phos),
+    alk.med = median(alk.phos, na.rm = TRUE),
+    alk.phos = ifelse(
+      is.na(alk.phos), ifelse(is.na(alk.lag), alk.med, alk.lag), alk.phos
+      )
+  ) %>%
+  mutate(
+    plt.lag = lag(platelet),
+    plt.med = median(platelet, na.rm = TRUE),
+    platelet = ifelse(
+      is.na(platelet), ifelse(is.na(plt.lag), plt.med, plt.lag), platelet
+      )
+  ) %>%
+  ungroup() %>%
+  select(-alk.lag, -alk.med, -plt.lag, -plt.med)
+
+```
+
+```{r}
+
+pbc_data %>% 
+  filter(trt == "Control") %>%
+  group_by(id) %>%
+  slice(1) %>%
+  nrow()
+
+```
+
+
+## Part 2: Exploratory Data Analysis
+
+```{r}
+
+bili_by_trt = pbc_data %>%
+  ggplot(aes(x = trt, y = bili, fill = trt)) + 
+  geom_boxplot() + 
+  theme_classic() + 
+  theme(legend.position = "none") + 
+  labs(
+    x = "",
+    y = "Serum Bilirubin (mg/dL)"
+  )
+
+ggsave("bili_by_trt.pdf", plot = bili_by_trt, width = 5, height = 3.75, units = "in")
+
+```
+
+```{r}
+
+pbc_data %>%
+  filter(trt == "Control") %>%
+  pull(bili) %>%
+  summary()
+
+pbc_data %>%
+  filter(trt == "Treatment") %>%
+  pull(bili) %>%
+  summary()
+
+```
+
+
+```{r}
+
+bili_spaghetti = pbc_data %>%
+  ggplot(aes(x = day, y = bili, group = id, color = trt)) + 
+  geom_line() + 
+  theme_classic() + 
+  labs(
+    x = "Time Since First Study Visit (Days)",
+    y = "Serum Bilirubin (mg/dL)"
+  )
+
+ggsave("bili_spaghetti.pdf", plot = bili_spaghetti, width = 5, height = 3.75, units = "in")
+
+bili_spaghetti
+
+```
+
+```{r}
+
+hist_study_visits = pbc_data %>%
+  group_by(id) %>%
+  summarize(visit_count = n()) %>%
+  ggplot(aes(x = visit_count)) + 
+  geom_histogram(fill = "lightblue", binwidth = 1, color = "black") + 
+  theme_classic() + 
+  labs(
+    x = "Visit Count",
+    y = "Frequency"
+  )
+
+ggsave("hist_study_visits.pdf", plot = hist_study_visits, width = 5, height = 3.75, units = "in")
+
+```
+
+
+## Part 3: Model Selection
+
+```{r}
+
+model_1 = lm(bili ~ trt + age + sex + time_yr + trt*time_yr, data = pbc_data)
+
+model_2 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr, random = ~1 | id, data = pbc_data, method = "ML")
+
+model_3 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr, random = ~time_yr | id, data = pbc_data, method = "ML")
+
+model_4 = lm(bili ~ trt + age + sex + time_yr + trt*time_yr 
+             + edema + albumin + ast + ascites + hepato + spiders + alk.phos,
+             data = pbc_data)
+
+model_5 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders + alk.phos, 
+              random = ~1 | id,
+              data = pbc_data,
+              method = "ML")
+
+model_6 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders + alk.phos, 
+              random = ~time_yr | id,
+              data = pbc_data,
+              method = "ML")
+
+model_7 = lm(bili ~ trt + age + sex + time_yr + trt*time_yr 
+             + edema + albumin + ast + ascites + hepato + spiders
+             + platelet + protime,
+             data = pbc_data)
+
+model_8 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders
+              + platelet + protime, 
+              random = ~1 | id,
+              data = pbc_data,
+              method = "ML")
+
+model_9 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders
+              + platelet + protime, 
+              random = ~time_yr | id,
+              data = pbc_data,
+              method = "ML")
+
+```
+
+```{r}
+
+model_comp = data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5", "Model 6", "Model 7", "Model 8", "Model 9"),
+  Complexity = c(rep("Basic", 3), rep("+ Liver Variables", 3), rep("+ Liver and Blood Clotting Variables", 3)),
+  Effects = rep(c("Fixed Only", "RI", "RI + RS"), 3),
+  Log_Likelihood = c(
+    logLik(model_1),
+    logLik(model_2),
+    logLik(model_3),
+    logLik(model_4),
+    logLik(model_5),
+    logLik(model_6),
+    logLik(model_7),
+    logLik(model_8),
+    logLik(model_9)
+  ),
+  AIC = c(
+    AIC(model_1),
+    AIC(model_2),
+    AIC(model_3),
+    AIC(model_4),
+    AIC(model_5),
+    AIC(model_6),
+    AIC(model_7),
+    AIC(model_8),
+    AIC(model_9)
+  )
+) %>%
+  mutate(
+    Log_Likelihood = round(Log_Likelihood, 0),
+    AIC = round(AIC, 0)
+    )
+
+model_comp_table = flextable(model_comp)
+
+save_as_image(model_comp_table, path = "model_comp_table.png")
+
+```
+
+```{r}
+
+model_i = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders
+              + platelet + protime, 
+              random = ~time_yr | id,
+              data = pbc_data,
+              method = "REML")
+
+model_ii = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders
+              + platelet + protime, 
+              random = ~time_yr | id,
+              data = pbc_data,
+              correlation = corCompSymm(form = ~ 1 | id),
+              method = "REML")
+
+model_iii = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders
+              + platelet + protime, 
+              random = ~time_yr | id,
+              data = pbc_data,
+              correlation = corExp(form = ~time_yr + bili | id),
+              method = "REML")
+
+model_iv = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders
+              + platelet + protime, 
+              random = ~time_yr | id,
+              data = pbc_data,
+              correlation = corExp(form = ~time_yr + bili | id, nugget = TRUE),
+              method = "REML")
+
+model_v = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders
+              + platelet + protime, 
+              random = ~time_yr | id,
+              data = pbc_data,
+              weights = varIdent(form = ~1 | trt),
+              control = lmeControl(maxIter = 200, msMaxIter = 200),
+              method = "REML")
+
+```
+
+```{r}
+
+corr_comp = data.frame(
+  Residual_Correlation = c("Independent", "Exchangeable", "Exponential Spatial", "Exponential Spatial (+ nugget)", "Independent/Heteroskedastic"),
+  Log_Likelihood = c(
+    logLik(model_i),
+    logLik(model_ii),
+    logLik(model_iii),
+    logLik(model_iv),
+    logLik(model_v)
+  ),
+  AIC = c(
+    AIC(model_i),
+    AIC(model_ii),
+    AIC(model_iii),
+    AIC(model_iv),
+    AIC(model_v)
+  )
+) %>%
+  mutate(
+    Log_Likelihood = round(Log_Likelihood, 0),
+    AIC = round(AIC, 0)
+    )
+
+corr_comp_table = flextable(corr_comp)
+
+save_as_image(corr_comp_table, path = "corr_comp_table.png")
+
+```
+
+
+## Missing Data Check
+
+```{r}
+
+length(pbc_data_raw$ascites[is.na(pbc_data_raw$ascites)])
+length(pbc_data_raw$hepato[is.na(pbc_data_raw$hepato)])
+length(pbc_data_raw$spiders[is.na(pbc_data_raw$spiders)])
+length(pbc_data_raw$alk.phos[is.na(pbc_data_raw$alk.phos)])
+length(pbc_data_raw$platelet[is.na(pbc_data_raw$platelet)])
+length(pbc_data_raw$protime[is.na(pbc_data_raw$protime)])
+
+```
+
+
+## Part 4: Final Model Diagnostics
+
+## Part 5: Discussion / Conclusion
