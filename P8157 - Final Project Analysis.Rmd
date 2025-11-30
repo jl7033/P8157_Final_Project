@@ -14,6 +14,7 @@ library(geepack)
 library(survival)
 library(tidyverse)
 library(flextable)
+library(cowplot)
 
 ```
 
@@ -77,6 +78,34 @@ pbc_data %>%
 
 
 ## Part 2: Exploratory Data Analysis
+
+```{r}
+
+pbc_attributes = pbc_data %>%
+  group_by(id) %>% 
+  slice(1) 
+
+pbc_attributes %>% pull(sex) %>% summary()
+pbc_attributes %>% pull(age) %>% mean()
+pbc_attributes %>% pull(age) %>% sd()
+pbc_attributes %>% pull(stage) %>% factor() %>% summary()
+
+```
+
+
+```{r}
+
+pbc_data %>%
+  ggplot(aes(x = bili)) + 
+  geom_histogram(fill = "lightblue", color = "black") +  
+  theme_classic() + 
+  labs(
+    x = "Serum Bilirubin (mg/dL)",
+    y = "Frequency"
+  )
+
+```
+
 
 ```{r}
 
@@ -148,41 +177,41 @@ ggsave("hist_study_visits.pdf", plot = hist_study_visits, width = 5, height = 3.
 
 ```{r}
 
-model_1 = lm(bili ~ trt + age + sex + time_yr + trt*time_yr, data = pbc_data)
+model_1 = lm(log(bili) ~ trt + age + sex + time_yr + trt*time_yr, data = pbc_data)
 
-model_2 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr, random = ~1 | id, data = pbc_data, method = "ML")
+model_2 = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr, random = ~1 | id, data = pbc_data, method = "ML")
 
-model_3 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr, random = ~time_yr | id, data = pbc_data, method = "ML")
+model_3 = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr, random = ~time_yr | id, data = pbc_data, method = "ML")
 
-model_4 = lm(bili ~ trt + age + sex + time_yr + trt*time_yr 
+model_4 = lm(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
              + edema + albumin + ast + ascites + hepato + spiders + alk.phos,
              data = pbc_data)
 
-model_5 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+model_5 = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
               + edema + albumin + ast + ascites + hepato + spiders + alk.phos, 
               random = ~1 | id,
               data = pbc_data,
               method = "ML")
 
-model_6 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+model_6 = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
               + edema + albumin + ast + ascites + hepato + spiders + alk.phos, 
               random = ~time_yr | id,
               data = pbc_data,
               method = "ML")
 
-model_7 = lm(bili ~ trt + age + sex + time_yr + trt*time_yr 
+model_7 = lm(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
              + edema + albumin + ast + ascites + hepato + spiders
              + platelet + protime,
              data = pbc_data)
 
-model_8 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+model_8 = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
               + edema + albumin + ast + ascites + hepato + spiders
               + platelet + protime, 
               random = ~1 | id,
               data = pbc_data,
               method = "ML")
 
-model_9 = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
+model_9 = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
               + edema + albumin + ast + ascites + hepato + spiders
               + platelet + protime, 
               random = ~time_yr | id,
@@ -233,40 +262,35 @@ save_as_image(model_comp_table, path = "model_comp_table.png")
 
 ```{r}
 
-model_i = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
-              + edema + albumin + ast + ascites + hepato + spiders
-              + platelet + protime, 
+model_i = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders,
               random = ~time_yr | id,
               data = pbc_data,
               method = "REML")
 
-model_ii = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
-              + edema + albumin + ast + ascites + hepato + spiders
-              + platelet + protime, 
+model_ii = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders,
               random = ~time_yr | id,
               data = pbc_data,
               correlation = corCompSymm(form = ~ 1 | id),
               method = "REML")
 
-model_iii = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
-              + edema + albumin + ast + ascites + hepato + spiders
-              + platelet + protime, 
+model_iii = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders,
               random = ~time_yr | id,
               data = pbc_data,
               correlation = corExp(form = ~time_yr + bili | id),
               method = "REML")
 
-model_iv = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
-              + edema + albumin + ast + ascites + hepato + spiders
-              + platelet + protime, 
+model_iv = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders,
               random = ~time_yr | id,
               data = pbc_data,
               correlation = corExp(form = ~time_yr + bili | id, nugget = TRUE),
               method = "REML")
 
-model_v = lme(bili ~ trt + age + sex + time_yr + trt*time_yr 
-              + edema + albumin + ast + ascites + hepato + spiders
-              + platelet + protime, 
+model_v = lme(log(bili) ~ trt + age + sex + time_yr + trt*time_yr 
+              + edema + albumin + ast + ascites + hepato + spiders,
               random = ~time_yr | id,
               data = pbc_data,
               weights = varIdent(form = ~1 | trt),
@@ -302,6 +326,159 @@ corr_comp = data.frame(
 corr_comp_table = flextable(corr_comp)
 
 save_as_image(corr_comp_table, path = "corr_comp_table.png")
+
+```
+
+## Part 4: Model Evaluation and Diagnostics
+
+```{r}
+
+final_model = model_iv
+
+fixef = summary(final_model)$tTable %>%
+  janitor::clean_names() %>%
+  data.frame() %>%
+  mutate(
+    value = round(value, 4),
+    std_error = round(std_error, 4),
+    t_value = round(t_value, 3),
+    p_value = round(p_value, 3),
+    term = c(
+      "Intercept",
+      "Treatment",
+      "Age",
+      "Female Sex",
+      "Time (years)",
+      "Edema / Resp. to Diuretics",
+      "Edema / Not Resp. to Diuretics",
+      "Albumin",
+      "AST",
+      "Ascites",
+      "Ascites - Missing",
+      "Hepatomegaly",
+      "Hepatomegaly - Missing",
+      "Spider Angiomas",
+      "Spider Angiomas - Missing",
+      "Time : Treatment Interaction"
+      )
+    ) %>%
+  select(term, value, std_error, p_value) %>%
+  rename(Term = term, Value = value, SE = std_error, "P-Value" = p_value)
+
+fixef_table = flextable(fixef)
+
+save_as_image(fixef_table, path = "fixef_table.png")
+
+
+```
+
+```{r}
+
+# get residuals
+
+pbc_diag = pbc_data %>%
+  mutate(stage1_resid = resid(final_model, type = "normalized")) %>%
+  group_by(id) %>%
+  arrange(id, time_yr) %>%
+  mutate(
+    resid_lag = lag(stage1_resid)
+  ) %>%
+  ungroup()
+
+# get random effects
+
+pbc_ranef = data.frame(
+  ranef_complex = ranef(final_model)
+) %>%
+  rename(rand_int = ranef_complex..Intercept., rand_slope = ranef_complex.time_yr)
+
+
+```
+
+
+```{r}
+
+# make diagnostic plots for the simple model
+
+resid_plot = pbc_diag %>%
+  ggplot(aes(x = time_yr, y = stage1_resid)) +
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") + 
+  theme(legend.position = "none") +
+  theme_classic() + 
+  labs(
+    title = "Distributions of Residuals by Time",
+    x = "Time From Baseline (Years)",
+    y = "Normalized Stage 1 Residuals"
+  ) + 
+  theme(plot.title = element_text(size = 8)) + 
+  theme(axis.title = element_text(size = 7))
+
+resid_lag_plot = pbc_diag %>%
+  ggplot(aes(x = resid_lag, y = stage1_resid)) + 
+  geom_point() + 
+  geom_smooth(se = FALSE) + 
+  theme_classic() + 
+  labs(
+    title = "Residuals vs. Lagged Residuals",
+    x = "Lagged Residuals",
+    y = "Normalized Stage 1 Residuals"
+  ) + 
+  theme(plot.title = element_text(size = 8)) + 
+  theme(axis.title = element_text(size = 7))
+
+qq_plot_resid = pbc_diag %>%
+  ggplot(aes(sample = stage1_resid)) +
+  stat_qq() + 
+  stat_qq_line() + 
+  theme_classic() +
+  labs(
+    title = "Q-Q Plot of Stage 1 Residuals",
+    x = "Theoretical Quantities",
+    y = "Sample Quantities"
+  ) + 
+  theme(plot.title = element_text(size = 8)) + 
+  theme(axis.title = element_text(size = 7))
+
+qq_plot_ranef = pbc_ranef %>%
+  ggplot(aes(sample = rand_int)) +
+  stat_qq() + 
+  stat_qq_line() + 
+  theme_classic() +
+  labs(
+    title = "Q-Q Plot of Random Intercepts",
+    x = "Theoretical Quantities",
+    y = "Sample Quantities"
+  ) + 
+  theme(plot.title = element_text(size = 8)) + 
+  theme(axis.title = element_text(size = 7))
+
+qq_plot_ransl = pbc_ranef %>%
+  ggplot(aes(sample = rand_slope)) +
+  stat_qq() + 
+  stat_qq_line() + 
+  theme_classic() +
+  labs(
+    title = "Q-Q Plot of Random Slopes",
+    x = "Theoretical Quantities",
+    y = "Sample Quantities"
+  ) + 
+  theme(plot.title = element_text(size = 8)) + 
+  theme(axis.title = element_text(size = 7))
+
+diag_plots = plot_grid(plotlist = list(
+  resid_plot, 
+  resid_lag_plot, 
+  qq_plot_resid,
+  qq_plot_ranef,
+  qq_plot_ransl),
+  nrow = 3,
+  ncol = 2
+  )
+
+diag_plots
+
+save_plot("diag_plots.png", diag_plots, base_width = 5, base_height = 3.75)
 
 ```
 
